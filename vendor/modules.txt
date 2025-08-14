@@ -698,6 +698,9 @@ github.com/gorilla/websocket
 # github.com/hashicorp/cli v1.1.7
 ## explicit; go 1.20
 github.com/hashicorp/cli
+# github.com/hashicorp/consul/api v1.32.1
+## explicit; go 1.23.8
+github.com/hashicorp/consul/api
 # github.com/hashicorp/cronexpr v1.1.2
 ## explicit
 github.com/hashicorp/cronexpr
@@ -836,6 +839,9 @@ github.com/hashicorp/raft-boltdb/v2
 # github.com/hashicorp/raft-snapshot v1.0.4
 ## explicit; go 1.12
 github.com/hashicorp/raft-snapshot
+# github.com/hashicorp/serf v0.10.1
+## explicit; go 1.12
+github.com/hashicorp/serf/coordinate
 # github.com/hashicorp/vic v1.5.1-0.20190403131502-bbfe86ec9443
 ## explicit
 github.com/hashicorp/vic/pkg/vsphere/tags
@@ -1173,9 +1179,11 @@ github.com/openbao/openbao/helper/random
 github.com/openbao/openbao/helper/storagepacker
 github.com/openbao/openbao/helper/testhelpers
 github.com/openbao/openbao/helper/testhelpers/corehelpers
+github.com/openbao/openbao/helper/testhelpers/logical
 github.com/openbao/openbao/helper/testhelpers/pluginhelpers
 github.com/openbao/openbao/helper/timeutil
 github.com/openbao/openbao/helper/versions
+github.com/openbao/openbao/http
 github.com/openbao/openbao/internalshared/configutil
 github.com/openbao/openbao/internalshared/listenerutil
 github.com/openbao/openbao/physical/raft
@@ -1520,6 +1528,9 @@ golang.org/x/crypto/sha3
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
+# golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
+## explicit; go 1.23.0
+golang.org/x/exp/slices
 # golang.org/x/mod v0.25.0
 ## explicit; go 1.23.0
 golang.org/x/mod/internal/lazyregexp

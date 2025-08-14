@@ -1,8 +1,8 @@
-# OpenBao Plugin: Nomad Secrets Backend
+# OpenBao Plugin: Consul Secrets Backend
 
 This is a standalone backend plugin for use with
-[OpenBao](https://www.github.com/openbao/openbao).  This plugin generates Nomad
-ACL tokens dynamically based on pre-existing Nomad ACL policies.
+[OpenBao](https://www.github.com/openbao/openbao). This plugin generates Consul
+ACL tokens dynamically based on pre-existing Consul ACL policies.
 
 ## Quick Links
 - [Docs](docs/readme.md)
@@ -27,7 +27,7 @@ Please see [documentation for the plugin](docs/readme.md).
 If you wish to work on this plugin, you'll first need
 [Go](https://www.golang.org) installed on your machine.
 
-To compile a development version of this plugin, run `go build`.  This will put
+To compile a development version of this plugin, run `go build`. This will put
 the plugin binary in the repository root folder.
 
 ```sh
@@ -59,24 +59,24 @@ catalog:
 $ bao plugin register \
         -sha256=<expected SHA256 Hex value of the plugin binary> \
         secret \
-        openbao-plugin-secrets-nomad
+        openbao-plugin-secrets-consul
 ```
 
 Note you should generate a new sha256 checksum if you have made changes to the
 plugin. Example using `sha256sum`:
 
 ```sh
-$ sha256sum openbao-plugin-secrets-nomad 
-1642208f51c221e1d1acecbd16dcfb6ea43909a150f35fff3fc233490b722d5e  openbao-plugin-secrets-nomad
+$ sha256sum openbao-plugin-secrets-consul 
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  openbao-plugin-secrets-consul
 ```
 
 Enable the plugin backend using the secrets enable plugin command:
 
 ```sh
-$ bao secrets enable -path=nomad openbao-plugin-secrets-nomad
+$ bao secrets enable -path=consul openbao-plugin-secrets-consul
 ...
 
-Successfully enabled 'openbao-plugin-secrets-nomad' at 'nomad'!
+Successfully enabled 'openbao-plugin-secrets-consul' at 'consul'!
 ```
 
 #### Tests
@@ -88,11 +88,11 @@ running the tests.
 To run the tests, invoke `go test`:
 
 ```sh
-$ go test ./nomad/...
+$ go test ./consul/...
 ```
 
 You can also filter tests like so:
 
 ```sh
-$ go test ./nomad/... --run=TestBackend_config_Bootstrap
+$ go test ./consul/... --run=TestBackend_Config_Access
 ```
