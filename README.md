@@ -14,6 +14,7 @@ Prebuilt binaries for these plugins are available in the [Releases](https://gith
 - **AWS** - Authenticate using AWS IAM credentials.
 - **Azure** - Authenticate using Microsoft Azure credentials.
 - **GCP** - Authenticate using Google Cloud Platform credentials.
+- **GitHub** - Authenticate using GitHub credentials.
 
 ### Database Plugins
 
