@@ -26,6 +26,7 @@ func TestBackend_PathConfigRoot(t *testing.T) {
 		"region":            "us-west-2",
 		"iam_endpoint":      "https://iam.amazonaws.com",
 		"sts_endpoint":      "https://sts.us-west-2.amazonaws.com",
+		"sts_region":        "us-west-2",
 		"max_retries":       10,
 		"username_template": defaultUserNameTemplate,
 	}
