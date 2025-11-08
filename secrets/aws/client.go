@@ -44,6 +44,10 @@ func getRootConfig(ctx context.Context, s logical.Storage, clientType string, lo
 		case clientType == "sts" && config.STSEndpoint != "":
 			endpoint = *aws.String(config.STSEndpoint)
 		}
+
+		if clientType == "sts" && config.STSRegion != "" {
+			credsConfig.Region = config.STSRegion
+		}
 	}
 
 	if credsConfig.Region == "" {
