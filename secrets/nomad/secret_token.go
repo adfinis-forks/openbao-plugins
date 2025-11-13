@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hashicorp/nomad/api"
 	"github.com/openbao/openbao/sdk/v2/framework"
 	"github.com/openbao/openbao/sdk/v2/logical"
 )
@@ -66,6 +67,16 @@ func (b *backend) secretTokenRevoke(ctx context.Context, req *logical.Request, d
 	}
 	_, err = c.ACLTokens().Delete(accessorID, nil)
 	if err != nil {
+		statusError := api.UnexpectedResponseError{}
+
+		if errors.As(err, &statusError) &&
+			statusError.StatusCode() == 400 &&
+			// Don't just rely on the status code, a 400 could have many causes (e.g. load balancer has briefly no backend)
+			// So we additionally match the exact response body.
+			// This might break in future versions of Nomad, but at least it's safe.
+			statusError.Body() == fmt.Sprintf("Cannot delete nonexistent tokens: %s", accessorID) {
+			return nil, nil //nolint:nilnil
+		}
 		return nil, err
 	}
 

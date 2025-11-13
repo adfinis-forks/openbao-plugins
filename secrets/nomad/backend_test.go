@@ -429,6 +429,86 @@ func TestBackend_renew_revoke(t *testing.T) {
 	}
 }
 
+func TestBackend_revoke_missing(t *testing.T) {
+	config := logical.TestBackendConfig()
+	config.StorageView = &logical.InmemStorage{}
+	b, err := Factory(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cleanup, svccfg := prepareTestContainer(t, true)
+	defer cleanup()
+
+	// Configure nomad credentials in plugin
+	connData := map[string]interface{}{
+		"address": svccfg.URL().String(),
+		"token":   svccfg.Token,
+	}
+
+	req := &logical.Request{
+		Storage:   config.StorageView,
+		Operation: logical.UpdateOperation,
+		Path:      "config/access",
+		Data:      connData,
+	}
+	resp, err := b.HandleRequest(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Configure role parameters
+	req.Path = "role/test"
+	req.Data = map[string]interface{}{
+		"policies": []string{"policy"},
+		"lease":    "6h",
+	}
+	resp, err = b.HandleRequest(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read dynamic secret
+	req.Operation = logical.ReadOperation
+	req.Path = "creds/test"
+	resp, err = b.HandleRequest(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp == nil {
+		t.Fatal("resp nil")
+	}
+	if resp.IsError() {
+		t.Fatalf("resp is error: %v", resp.Error())
+	}
+
+	generatedSecret := resp.Secret
+
+	// Revoke using nomad api
+	nomadmgmtConfig := nomadapi.DefaultConfig()
+	nomadmgmtConfig.Address = connData["address"].(string)
+	nomadmgmtConfig.SecretID = connData["token"].(string)
+	mgmtclient, err := nomadapi.NewClient(nomadmgmtConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log("[INFO] Deleting token using nomad api...")
+	_, err = mgmtclient.ACLTokens().Delete(resp.Data["accessor_id"].(string), &nomadapi.WriteOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Revoke using plugin
+	req.Operation = logical.RevokeOperation
+	req.Secret = generatedSecret
+	resp, err = b.HandleRequest(context.Background(), req)
+	if err != nil {
+		t.Fatal("missing token should be ignored (https://openbao.org/docs/plugins/plugin-authors-guide/#revoke-operations-should-ignore-not-found-errors):", err)
+	}
+
+}
+
 func TestBackend_CredsCreateEnvVar(t *testing.T) {
 	config := logical.TestBackendConfig()
 	config.StorageView = &logical.InmemStorage{}
