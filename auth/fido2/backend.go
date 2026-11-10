@@ -8,9 +8,8 @@ import (
 	"errors"
 	"path"
 	"strings"
-	"sync"
-	"sync/atomic"
 
+	"github.com/openbao/openbao-plugins/auth/fido2/helper/invalidate"
 	"github.com/openbao/openbao-plugins/auth/fido2/ui"
 	"github.com/openbao/openbao/sdk/v2/framework"
 	"github.com/openbao/openbao/sdk/v2/helper/salt"
@@ -24,11 +23,10 @@ var pluginVersion string
 type backend struct {
 	*framework.Backend
 
-	configLock sync.Mutex // protects against concurrent write/patch operations, reads are protected using atomics
-	config     atomic.Pointer[config]
+	config invalidate.Invalidateable[config]
 
-	enrollChallengeSalt *salt.Salt
-	loginChallengeSalt  *salt.Salt
+	enrollChallengeSalt invalidate.Invalidateable[salt.Salt]
+	loginChallengeSalt  invalidate.Invalidateable[salt.Salt]
 }
 
 // Factory returns a new backend as logical.Backend.
@@ -191,23 +189,28 @@ func Backend() *backend {
 	return b
 }
 
+const (
+	saltPrefix              = "salts/v1/"
+	loginChallengeSaltPath  = saltPrefix + "login-challenge"
+	enrollChallengeSaltPath = saltPrefix + "enroll-challenge"
+	configStoragePath       = "config/v1"
+)
+
 func (b *backend) initialize(ctx context.Context, req *logical.InitializationRequest) error {
-	var err error
-	b.loginChallengeSalt, err = salt.NewSalt(ctx, req.Storage, &salt.Config{
-		Location: "config/login-challenge-salt",
-	})
+	b.loginChallengeSalt = invalidate.NewInvalidateableSalt(loginChallengeSaltPath)
+	_, err := b.loginChallengeSalt.Get(ctx, req.Storage)
 	if err != nil {
 		return err
 	}
 
-	b.enrollChallengeSalt, err = salt.NewSalt(ctx, req.Storage, &salt.Config{
-		Location: "config/enroll-challenge-salt",
-	})
+	b.enrollChallengeSalt = invalidate.NewInvalidateableSalt(enrollChallengeSaltPath)
+	_, err = b.enrollChallengeSalt.Get(ctx, req.Storage)
 	if err != nil {
 		return err
 	}
 
-	err = b.loadConfig(ctx, req.Storage)
+	b.config = invalidate.NewInvalidateable(b.loadConfig)
+	_, err = b.config.Get(ctx, req.Storage)
 	if err != nil {
 		return err
 	}
@@ -219,17 +222,17 @@ func (b *backend) periodic(ctx context.Context, req *logical.Request) error {
 	return cleanupExpiredConsumedChallenges(ctx, b.Logger().Named("cleanupExpiredConsumedChallenges"), req.Storage)
 }
 
-// ClearCaches deletes all cached clients and credentials.
-func (b *backend) ClearCaches() {
-	// TODO
-}
-
-// invalidate resets the plugin. This is called when a key is updated via
-// replication.
+// invalidate is called on standbys when the primary updated the storage
 func (b *backend) invalidate(_ context.Context, key string) {
 	switch key {
-	case "config":
-		b.ClearCaches()
+	case configStoragePath:
+		b.config.Invalidate()
+	case enrollChallengeSaltPath:
+		b.enrollChallengeSalt.Invalidate()
+	case loginChallengeSaltPath:
+		b.loginChallengeSalt.Invalidate()
+	default:
+		b.Logger().Warn("unknown key during invalidation", "key", key)
 	}
 }
 

@@ -17,26 +17,22 @@ type config struct {
 	RecommendHardwareToken bool
 }
 
-func (b *backend) loadConfig(ctx context.Context, storage logical.Storage) error {
-	b.configLock.Lock()
-	defer b.configLock.Unlock()
-
-	entry, err := storage.Get(ctx, "config")
+func (b *backend) loadConfig(ctx context.Context, storage logical.Storage) (*config, error) {
+	entry, err := storage.Get(ctx, configStoragePath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	currentConfig := &config{}
+	c := &config{}
 	if entry != nil {
-		err = entry.DecodeJSON(currentConfig)
+		err = entry.DecodeJSON(c)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	b.config.Store(currentConfig)
+	return c, nil
 
-	return nil
 }
 
 func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
@@ -50,32 +46,32 @@ func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, dat
 		return nil, logical.CodedError(http.StatusBadRequest, "relying_party_origins is required")
 	}
 
-	b.configLock.Lock()
-	defer b.configLock.Unlock()
+	return nil, b.config.Update(func(_ *config) (*config, error) {
+		newConfig := &config{
+			RelyingPartyId:         relyingPartyId.(string),
+			RelyingPartyOrigins:    relyingPartyOrigins.([]string),
+			RecommendHardwareToken: data.Get("recommend_hardware_token").(bool),
+		}
 
-	newConfig := &config{
-		RelyingPartyId:         relyingPartyId.(string),
-		RelyingPartyOrigins:    relyingPartyOrigins.([]string),
-		RecommendHardwareToken: data.Get("recommend_hardware_token").(bool),
-	}
+		entry, err := logical.StorageEntryJSON(configStoragePath, newConfig)
+		if err != nil {
+			return nil, logical.CodedError(http.StatusInternalServerError, "could not marshal config: %v", err)
+		}
 
-	entry, err := logical.StorageEntryJSON("config", newConfig)
-	if err != nil {
-		return nil, logical.CodedError(http.StatusInternalServerError, "could not marshal config: %v", err)
-	}
+		err = req.Storage.Put(ctx, entry)
+		if err != nil {
+			return nil, logical.CodedError(http.StatusInternalServerError, "could not store config: %v", err)
+		}
 
-	err = req.Storage.Put(ctx, entry)
-	if err != nil {
-		return nil, logical.CodedError(http.StatusInternalServerError, "could not store config: %v", err)
-	}
-
-	b.config.Store(newConfig)
-
-	return nil, nil
+		return newConfig, nil
+	})
 }
 
 func (b *backend) pathConfigRead(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	currentConfig := b.config.Load()
+	currentConfig, err := b.config.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
 
 	if currentConfig == nil {
 		currentConfig = &config{}

@@ -19,6 +19,16 @@ import (
 func (b *backend) pathInternalEnrollResponseWrite(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	// https://fidoalliance.org/specs/fidoserver/fido-server-v2.3-rd-20260226.html
 
+	config, err := b.config.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
+
+	salt, err := b.enrollChallengeSalt.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
+
 	response, ok := data.GetOk("assertion")
 	if !ok {
 		return nil, logical.CodedError(http.StatusBadRequest, "assertion is required")
@@ -29,12 +39,11 @@ func (b *backend) pathInternalEnrollResponseWrite(ctx context.Context, req *logi
 		return nil, logical.CodedError(http.StatusBadRequest, "invalid assertion: %v", err)
 	}
 
-	token, challenge, err := unwrapChallenge(b.enrollChallengeSalt, assertion.Response.CollectedClientData.Challenge)
+	token, challenge, err := unwrapChallenge(salt, assertion.Response.CollectedClientData.Challenge)
 	if err != nil {
 		return nil, err
 	}
 
-	config := b.config.Load()
 	_, err = assertion.Verify(
 		assertion.Response.CollectedClientData.Challenge, // Bypass the challenge validation: we already validated it above
 		config.RelyingPartyId,
@@ -100,6 +109,16 @@ func (b *backend) pathInternalEnrollResponseWrite(ctx context.Context, req *logi
 }
 
 func (b *backend) pathInternalEnrollChallengeRead(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	config, err := b.config.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
+
+	salt, err := b.enrollChallengeSalt.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
+
 	token, ok := data.GetOk("token")
 	if !ok {
 		return nil, logical.CodedError(http.StatusBadRequest, "token is required")
@@ -134,9 +153,8 @@ func (b *backend) pathInternalEnrollChallengeRead(ctx context.Context, req *logi
 		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
 	}
 
-	config := b.config.Load()
 	publicKeyRequest := protocol.PublicKeyCredentialCreationOptions{
-		Challenge: wrapChallenge(b.enrollChallengeSalt, token.(string)),
+		Challenge: wrapChallenge(salt, token.(string)),
 		RelyingParty: protocol.RelyingPartyEntity{
 			ID: config.RelyingPartyId,
 			CredentialEntity: protocol.CredentialEntity{

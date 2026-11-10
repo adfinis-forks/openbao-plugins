@@ -107,8 +107,6 @@ bao write identity/entity-alias \
   nor for the admin).
 - User handle should not be the alias name -> change to a salted hash. See
   [webauthn Level 3 spec](https://www.w3.org/TR/webauthn-3/#user-handle)
-- Make sure it works well with read-enabled standbys (i.e. implement the
-  `Invalidate` hook).
 - Check / store the signature counter
 - Store additional metadata, like backup flags
 - Let users assign a names to their keys

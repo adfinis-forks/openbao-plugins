@@ -140,8 +140,10 @@ func TestLogin(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 
 		backend, storage := createBackend(t)
-		backend.config.Store(&config{
-			RelyingPartyId: "example.com", RelyingPartyOrigins: []string{"https://example.com"},
+		backend.config.Update(func(c *config) (*config, error) {
+			return &config{
+				RelyingPartyId: "example.com", RelyingPartyOrigins: []string{"https://example.com"},
+			}, nil
 		})
 
 		var (
@@ -290,5 +292,54 @@ func TestLogin(t *testing.T) {
 		list, err = storage.List(t.Context(), "v1/consumed-challenges/")
 		require.NoError(t, err)
 		require.Empty(t, list)
+	})
+}
+
+func TestInvalidateConfig(t *testing.T) {
+	t.Parallel()
+
+	backend, storage := createBackend(t)
+
+	stepConfigWrite := logicaltest.TestStep{
+		Operation: logical.UpdateOperation,
+		Path:      "config",
+		Data: map[string]any{
+			"relying_party_id":      "example.com",
+			"relying_party_origins": "example.com",
+		},
+		Check: func(r *logical.Response) error {
+			err := storage.Put(t.Context(), &logical.StorageEntry{
+				Key: configStoragePath,
+				Value: []byte(`{
+					"RelyingPartyId": "example.org",
+					"RelyingPartyOrigins": ["example.org"]
+				}`),
+			})
+			if err != nil {
+				return err
+			}
+
+			backend.Invalidate(t.Context(), configStoragePath)
+			return nil
+		},
+	}
+
+	stepConfigRead := logicaltest.TestStep{
+		Operation: logical.ReadOperation,
+		Path:      "config",
+		Check: func(r *logical.Response) error {
+			assert.Equal(t, "example.org", r.Data["relying_party_id"])
+			assert.Equal(t, []string{"example.org"}, r.Data["relying_party_origins"])
+			return nil
+		},
+	}
+
+	logicaltest.Test(t, logicaltest.TestCase{
+		Backend: backend,
+		Storage: storage,
+		Steps: []logicaltest.TestStep{
+			stepConfigWrite,
+			stepConfigRead,
+		},
 	})
 }

@@ -58,14 +58,24 @@ func findCredentialsForAlias(ctx context.Context, s logical.Storage, aliasName s
 }
 
 func (b *backend) pathInternalLoginChallengeRead(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	config, err := b.config.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
+
+	salt, err := b.loginChallengeSalt.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
+
 	otp, err := roottoken.GenerateOTP(0)
 	if err != nil {
 		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
 	}
 
 	publicKeyRequest := protocol.PublicKeyCredentialRequestOptions{
-		Challenge:      wrapChallenge(b.loginChallengeSalt, otp),
-		RelyingPartyID: b.config.Load().RelyingPartyId,
+		Challenge:      wrapChallenge(salt, otp),
+		RelyingPartyID: config.RelyingPartyId,
 		// To make it two-factor, UserVerification is required
 		UserVerification: protocol.VerificationRequired,
 	}
@@ -78,6 +88,16 @@ func (b *backend) pathInternalLoginChallengeRead(ctx context.Context, req *logic
 }
 
 func (b *backend) pathInternalLoginFinish(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	config, err := b.config.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
+
+	salt, err := b.loginChallengeSalt.Get(ctx, req.Storage)
+	if err != nil {
+		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+	}
+
 	response, ok := data.GetOk("assertion")
 	if !ok {
 		return nil, logical.CodedError(http.StatusBadRequest, "assertion is required")
@@ -88,7 +108,7 @@ func (b *backend) pathInternalLoginFinish(ctx context.Context, req *logical.Requ
 		return nil, logical.CodedError(http.StatusBadRequest, "could not parse assertion: %v", err)
 	}
 
-	_, challenge, err := unwrapChallenge(b.loginChallengeSalt, resp.Response.CollectedClientData.Challenge)
+	_, challenge, err := unwrapChallenge(salt, resp.Response.CollectedClientData.Challenge)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +133,6 @@ func (b *backend) pathInternalLoginFinish(ctx context.Context, req *logical.Requ
 		return nil, logical.CodedError(http.StatusInternalServerError, "invalid entry %q: %v", resp.ID, err)
 	}
 
-	config := b.config.Load()
 	err = resp.Verify(
 		resp.Response.CollectedClientData.Challenge,
 		config.RelyingPartyId,
