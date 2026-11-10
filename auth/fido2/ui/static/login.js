@@ -25,9 +25,7 @@ async function login() {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      // fidoToJSON is needed, because of this bug: https://github.com/microsoft/playwright/issues/43093
-      // should be fixed in the next release of playwright
-      assertion: JSON.stringify(fidoToJSON(result, "get")),
+      assertion: JSON.stringify(result),
     }),
   });
 
