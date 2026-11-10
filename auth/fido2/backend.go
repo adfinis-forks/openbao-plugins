@@ -5,25 +5,18 @@ package fido2
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
 	"path"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/openbao/openbao-plugins/auth/fido2/ui"
 	"github.com/openbao/openbao/sdk/v2/framework"
-	"github.com/openbao/openbao/sdk/v2/helper/roottoken"
 	"github.com/openbao/openbao/sdk/v2/helper/salt"
 	"github.com/openbao/openbao/sdk/v2/logical"
 
 	"github.com/go-webauthn/webauthn/protocol"
-	"github.com/go-webauthn/webauthn/protocol/webauthncose"
 )
 
 var pluginVersion string
@@ -261,217 +254,6 @@ type credentialStorageEntry struct {
 	CredentialType  string
 	CredentialBytes protocol.URLEncodedBase64
 	Raw             string
-}
-
-func (b *backend) pathInternalEnrollResponseWrite(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	// https://fidoalliance.org/specs/fidoserver/fido-server-v2.3-rd-20260226.html
-
-	response, ok := data.GetOk("assertion")
-	if !ok {
-		return nil, logical.CodedError(http.StatusBadRequest, "assertion is required")
-	}
-
-	assertion, err := protocol.ParseCredentialCreationResponseBytes([]byte(response.(string)))
-	if err != nil {
-		return nil, logical.CodedError(http.StatusBadRequest, "invalid assertion: %v", err)
-	}
-
-	token, challenge, err := unwrapChallenge(b.enrollChallengeSalt, assertion.Response.CollectedClientData.Challenge)
-	if err != nil {
-		return nil, err
-	}
-
-	config := b.config.Load()
-	_, err = assertion.Verify(
-		assertion.Response.CollectedClientData.Challenge, // Bypass the challenge validation: we already validated it above
-		config.RelyingPartyId,
-		config.RelyingPartyOrigins,
-		nil,
-		nil,
-		protocol.TopOriginAutoVerificationMode,
-		false,
-		true,
-		true,
-		nil,
-		[]protocol.CredentialParameter{{Type: protocol.PublicKeyCredentialType, Algorithm: webauthncose.AlgES256}},
-		protocol.AttestationPolicy{},
-		protocol.SignaturePolicy{},
-	)
-	if err != nil {
-		if err, ok := errors.AsType[*protocol.Error](err); ok {
-			b.Logger().Debug("protocol error", "type", err.Type, "details", err.Details, "dev_info", err.DevInfo)
-		}
-		return nil, logical.CodedError(http.StatusBadRequest, "invalid assertion: %v", err)
-	}
-
-	_, aliasName, err := splitToken(token)
-	if err != nil {
-		return nil, logical.CodedError(http.StatusBadRequest, err.Error())
-	}
-
-	storageEntryValue, err := json.Marshal(credentialStorageEntry{
-		CredentialId:    assertion.RawID,
-		CredentialType:  assertion.Type,
-		CredentialBytes: assertion.Response.AttestationObject.AuthData.AttData.CredentialPublicKey,
-		Raw:             response.(string),
-	})
-	if err != nil {
-		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
-	}
-
-	err = logical.WithTransaction(ctx, req.Storage, func(s logical.Storage) error {
-		err := consumeChallenge(ctx, s, challenge)
-		if err != nil {
-			return err
-		}
-
-		return s.Put(ctx, &logical.StorageEntry{
-			Key:   escapedPathJoin("v1", "credentials", aliasName, assertion.ID), // the ID might be 1023 bytes long + base64 overhead https://www.w3.org/TR/webauthn-3/#credential-id TODO: is this a problem
-			Value: storageEntryValue,
-		})
-	})
-	if err != nil {
-		if _, ok := errors.AsType[logical.HTTPCodedError](err); ok {
-			return nil, err
-		}
-		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
-	}
-
-	return &logical.Response{
-		Auth: &logical.Auth{
-			Alias: &logical.Alias{
-				Name: aliasName,
-			},
-		},
-	}, nil
-}
-
-func (b *backend) pathInternalEnrollChallengeRead(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	token, ok := data.GetOk("token")
-	if !ok {
-		return nil, logical.CodedError(http.StatusBadRequest, "token is required")
-	}
-
-	_, aliasName, err := splitToken(token.(string))
-	if err != nil {
-		return nil, logical.CodedError(http.StatusBadRequest, err.Error())
-	}
-
-	rollback, err := logical.StartTxStorage(ctx, req)
-	if err != nil {
-		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
-	}
-	defer rollback()
-
-	tokenStoragePath := escapedPathJoin("v1", "enrollment-tokens", aliasName, token.(string))
-	tokenEntry, err := req.Storage.Get(ctx, tokenStoragePath)
-	if err != nil {
-		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
-	}
-	if tokenEntry == nil {
-		return nil, logical.CodedError(http.StatusNotFound, "token not found")
-	}
-	err = req.Storage.Delete(ctx, tokenStoragePath)
-	if err != nil {
-		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
-	}
-
-	existingCredentials, err := findCredentialsForAlias(ctx, req.Storage, aliasName)
-	if err != nil {
-		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
-	}
-
-	config := b.config.Load()
-	publicKeyRequest := protocol.PublicKeyCredentialCreationOptions{
-		Challenge: wrapChallenge(b.enrollChallengeSalt, token.(string)),
-		RelyingParty: protocol.RelyingPartyEntity{
-			ID: config.RelyingPartyId,
-			CredentialEntity: protocol.CredentialEntity{
-				Name: "OpenBao",
-			},
-		},
-		User: protocol.UserEntity{
-			DisplayName: aliasName,
-			Name:        aliasName, // TODO: alias@clustername?
-			ID:          protocol.URLEncodedBase64(aliasName),
-		},
-		CredentialExcludeList: existingCredentials,
-		// Attestation: protocol.PreferDirectAttestation, TODO: support this
-		Parameters: []protocol.CredentialParameter{{
-			Type:      protocol.PublicKeyCredentialType,
-			Algorithm: webauthncose.AlgES256,
-		}},
-		AuthenticatorSelection: protocol.AuthenticatorSelection{
-			// Passkeys are "discoverable" (f.k.a "resident") credentials
-			// https://www.w3.org/TR/webauthn-3/#discoverable-credential
-			ResidentKey:        "required",
-			RequireResidentKey: new(true),
-			// To make it two-factor, UserVerification is required
-			UserVerification: protocol.VerificationRequired,
-		},
-	}
-
-	if config.RecommendHardwareToken {
-		// as of today, these values seem to be largely ignored by browsers
-		// we implement our own checks in JavaScript (no enforcement, just recommendation)
-		publicKeyRequest.Hints = append(publicKeyRequest.Hints, protocol.PublicKeyCredentialHintSecurityKey)
-		publicKeyRequest.AuthenticatorSelection.AuthenticatorAttachment = protocol.CrossPlatform
-	}
-
-	err = logical.EndTxStorage(ctx, req)
-	if err != nil {
-		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
-	}
-
-	return &logical.Response{
-		Data: map[string]any{
-			"publicKey":                publicKeyRequest,
-			"recommend_hardware_token": config.RecommendHardwareToken,
-		},
-	}, nil
-}
-
-func (b *backend) pathSelfServiceEnroll(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	entity, err := b.System().EntityInfo(req.EntityID)
-	if err != nil {
-		return nil, err
-	}
-	if entity == nil {
-		return nil, logical.CodedError(http.StatusNotFound, "entity not found")
-	}
-
-	aliasIdx := slices.IndexFunc(entity.Aliases, func(alias *logical.Alias) bool {
-		return alias.MountAccessor == req.MountAccessor
-	})
-
-	if aliasIdx == -1 {
-		return nil, fmt.Errorf("no alias available for self-service, please ask your authentication admin to create an alias for mount-accessor %q and entity %q", req.MountAccessor, req.EntityID)
-	}
-
-	otp, err := roottoken.GenerateOTP(16)
-	if err != nil {
-		return nil, err
-	}
-
-	token := fmt.Sprintf("v1.%s.%s", otp, entity.Aliases[aliasIdx].Name)
-	tokenStoragePath := escapedPathJoin("v1", "enrollment-tokens", entity.Aliases[aliasIdx].Name, token)
-	err = req.Storage.Put(ctx, &logical.StorageEntry{
-		Key:   tokenStoragePath,
-		Value: []byte{},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	resp := b.Secret(SecretTypeEnrollmentToken).Response(map[string]any{
-		"token": token,
-	}, map[string]any{
-		"storage_path": tokenStoragePath,
-	})
-	resp.Secret.Renewable = false
-	resp.Secret.TTL = 60 * time.Second
-
-	return resp, nil
 }
 
 var pathReplacer = strings.NewReplacer(
