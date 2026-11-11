@@ -99,7 +99,7 @@ func startBao(t *testing.T) *api.Client {
 	require.NoError(t, err)
 
 	// create self-enroll policy
-	require.NoError(t, client.Sys().PutPolicy("passkey-self-enroll", `path "auth/passkey/self-service-enroll" {
+	require.NoError(t, client.Sys().PutPolicy("passkey-self-enroll", `path "auth/passkey/self-service/enroll" {
 		capabilities = ["update"]
 	}`))
 

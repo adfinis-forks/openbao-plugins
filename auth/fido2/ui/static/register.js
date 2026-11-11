@@ -83,7 +83,7 @@ async function enrollSelfService() {
   }
 
   const resp = await checkedFetch(
-    `${baseURL}/self-service-enroll`, {
+    `${baseURL}/self-service/enroll`, {
       method: "PUT",
       headers: {
         "X-Vault-Token": selfServiceInfo.token,
@@ -124,71 +124,6 @@ function init() {
 
 window.onload = init;
 
-/** @typedef {object} tokenInfo
- * @property {string} userRootNamespace
- * @property {string} displayName
- * @property {object} backend
- * @property {string} backend.type
- * @property {string} backend.typeDisplay
- * @property {string} backend.description
- * @property {string} backend.tokenPath
- * @property {string} backend.displayNamePath
- * @property {string[]} backend.formAttributes
- * @property {string} token
- * @property {string[]} policies
- * @property {boolean} renewable
- * @property {string} entity_id
- * @property {number} ttl
- * @property {number} tokenExpirationEpoch
- *
- * Example:
-    {
-      "userRootNamespace": "",
-      "displayName": "alice",
-      "backend": {
-        "type": "userpass",
-        "typeDisplay": "Username",
-        "description": "A simple username and password backend.",
-        "tokenPath": "client_token",
-        "displayNamePath": "metadata.username",
-        "formAttributes": [
-          "username",
-          "password"
-        ]
-      },
-      "token": "s.token",
-      "policies": [
-        "default",
-        "read-kv"
-      ],
-      "renewable": true,
-      "entity_id": "31ae1911-d3cc-f5f1-d7a3-8e60edb55773",
-      "ttl": 2764800,
-      "tokenExpirationEpoch": 1793347030958
-    }
- *
- * TODO: would be nice to use TypeScript here instead
- */
-
-/**
- * @return {tokenInfo}
- */
-function getSelfServiceInfo() {
-  const selectedAuth = localStorage.getItem('selectedAuth');
-  if (!selectedAuth) {
-    console.debug('self service not available: "selectedAuth" not set');
-    return null;
-  }
-
-  const key = `${TOKEN_PREFIX}${selectedAuth}${TOKEN_SEPARATOR}1`;
-  const dataJSON = localStorage.getItem(key);
-  if (!dataJSON) {
-    console.debug(`self service not available: "${key}" not set`);
-    return null;
-  }
-
-  return JSON.parse(dataJSON);
-}
 
 function hardwareKeyDialog() {
   return new Promise((resolve, _reject) => {

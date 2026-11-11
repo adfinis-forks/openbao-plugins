@@ -103,13 +103,10 @@ bao write identity/entity-alias \
 
 ## TODOs
 
-- There is no way of listing and deleting enrolled keys (neither for the user
-  nor for the admin).
 - User handle should not be the alias name -> change to a salted hash. See
   [webauthn Level 3 spec](https://www.w3.org/TR/webauthn-3/#user-handle)
 - Check / store the signature counter
 - Store additional metadata, like backup flags
-- Let users assign a names to their keys
 - Add security headers (like Content-Security-Polices) to the UI.
 - Streamline the request paths and operations (`created` vs `read`) and use
   request body instead of query string for all sensitive values.

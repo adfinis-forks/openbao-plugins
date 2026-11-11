@@ -77,7 +77,7 @@ func TestSelfEnroll(t *testing.T) {
 
 	stepGetTokenSelf := logicaltest.TestStep{
 		Operation: logical.UpdateOperation,
-		Path:      "self-service-enroll",
+		Path:      "self-service/enroll",
 		Check: func(r *logical.Response) error {
 			require.NotPanics(t, func() {
 				enrollmentToken = r.Data["token"].(string)
@@ -153,7 +153,7 @@ func TestLogin(t *testing.T) {
 		)
 		stepGetTokenSelf := logicaltest.TestStep{
 			Operation: logical.UpdateOperation,
-			Path:      "self-service-enroll",
+			Path:      "self-service/enroll",
 			Check: func(r *logical.Response) error {
 				require.NotPanics(t, func() {
 					enrollmentToken = r.Data["token"].(string)

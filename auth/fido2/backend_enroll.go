@@ -93,10 +93,7 @@ func (b *backend) pathInternalEnrollResponseWrite(ctx context.Context, req *logi
 		})
 	})
 	if err != nil {
-		if _, ok := errors.AsType[logical.HTTPCodedError](err); ok {
-			return nil, err
-		}
-		return nil, logical.CodedError(http.StatusInternalServerError, err.Error())
+		return nil, asCodedError(err)
 	}
 
 	return &logical.Response{

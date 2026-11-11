@@ -145,11 +145,85 @@ func Backend() *backend {
 				},
 			},
 		}, {
-			Pattern:      "self-service-enroll",
+			Pattern:      "self-service/enroll",
 			HelpSynopsis: "Get an enrollment token for the current identity",
 			Operations: map[logical.Operation]framework.OperationHandler{
 				logical.UpdateOperation: &framework.PathOperation{
 					Callback: b.pathSelfServiceEnroll,
+				},
+			},
+		}, {
+			Pattern:      "self-service/keys/",
+			HelpSynopsis: "Get enrolled keys for current user",
+			Operations: map[logical.Operation]framework.OperationHandler{
+				logical.ListOperation: &framework.PathOperation{
+					Callback: b.pathSelfServiceList,
+				},
+			},
+		}, {
+			Pattern: "self-service/keys/" + framework.GenericNameRegex("id"),
+			Fields: map[string]*framework.FieldSchema{
+				"id": &framework.FieldSchema{
+					Type:     framework.TypeString,
+					Required: true,
+				},
+				"name": &framework.FieldSchema{
+					Type:     framework.TypeString,
+					Required: false,
+				},
+			},
+			HelpSynopsis: "Mange enrolled keys for current user",
+			Operations: map[logical.Operation]framework.OperationHandler{
+				logical.ReadOperation: &framework.PathOperation{
+					Callback: b.pathSelfServiceRead,
+				},
+				logical.DeleteOperation: &framework.PathOperation{
+					Callback: b.pathSelfServiceDelete,
+				},
+				logical.PatchOperation: &framework.PathOperation{
+					Callback: b.pathSelfServicePatch,
+				},
+			},
+		}, {
+			Pattern: "manage/" + framework.GenericNameRegex("alias") + "/keys/",
+			Fields: map[string]*framework.FieldSchema{
+				"alias": &framework.FieldSchema{
+					Type:     framework.TypeString,
+					Required: true,
+				},
+			},
+			HelpSynopsis: "Get enrolled keys for given alias",
+			Operations: map[logical.Operation]framework.OperationHandler{
+				logical.ListOperation: &framework.PathOperation{
+					Callback: b.pathAdminList,
+				},
+			},
+		}, {
+			Pattern: "manage/" + framework.GenericNameRegex("alias") + "/keys/" + framework.GenericNameRegex("id"),
+			Fields: map[string]*framework.FieldSchema{
+				"alias": &framework.FieldSchema{
+					Type:     framework.TypeString,
+					Required: true,
+				},
+				"id": &framework.FieldSchema{
+					Type:     framework.TypeString,
+					Required: true,
+				},
+				"name": &framework.FieldSchema{
+					Type:     framework.TypeString,
+					Required: false,
+				},
+			},
+			HelpSynopsis: "Mange enrolled keys given alias",
+			Operations: map[logical.Operation]framework.OperationHandler{
+				logical.ReadOperation: &framework.PathOperation{
+					Callback: b.pathAdminRead,
+				},
+				logical.DeleteOperation: &framework.PathOperation{
+					Callback: b.pathAdminDelete,
+				},
+				logical.PatchOperation: &framework.PathOperation{
+					Callback: b.pathAdminPatch,
 				},
 			},
 		}, {
@@ -257,6 +331,7 @@ type credentialStorageEntry struct {
 	CredentialType  string
 	CredentialBytes protocol.URLEncodedBase64
 	Raw             string
+	DisplayName     string
 }
 
 var pathReplacer = strings.NewReplacer(
